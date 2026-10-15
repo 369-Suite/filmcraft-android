@@ -467,6 +467,11 @@ fn field_options_and_time_interpolation_are_stored() {
     assert_eq!(clip(&s, c).time_interpolation, TimeInterpolation::OpticalFlow);
     s.execute("clip.speedDuration", json!({"speed": 50.0, "interpolation": "frameSampling"})).unwrap();
     assert_eq!(clip(&s, c).time_interpolation, TimeInterpolation::FrameSampling);
+    assert!(!clip(&s, c).maintain_pitch, "Maintain Audio Pitch is off by default");
+    s.execute("clip.speedDuration", json!({"speed": 50.0, "maintainPitch": true})).unwrap();
+    assert!(clip(&s, c).maintain_pitch);
+    s.execute("clip.speedDuration", json!({"speed": 60.0})).unwrap();
+    assert!(clip(&s, c).maintain_pitch, "left as it is when not given");
     // survives a save / load
     let bytes = filmcraft_format::encode(&s.project, true);
     let back = filmcraft_format::decode(&bytes).unwrap().project;

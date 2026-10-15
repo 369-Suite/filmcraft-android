@@ -719,6 +719,23 @@ fn a_nest_at_another_sample_rate_keeps_its_pitch_and_timing() {
 }
 
 #[test]
+fn a_clip_that_keeps_its_pitch_plays_faster_at_the_same_note() {
+    // the inner sequence of `nested_tone` holds a plain 500 Hz clip
+    let (mut p, _outer, map, _tone) = nested_tone(48_000);
+    let inner = p.items.values().find(|i| i.name == "inner").map(|i| i.id).unwrap();
+    let rising = |m: &AudioBuffer| m.channels[0].windows(2).filter(|w| w[0] < 0.0 && w[1] >= 0.0).count();
+    let clip = &mut p.sequence_mut(inner).unwrap().audio_tracks[0].items[0];
+    clip.speed = 2.0;
+    clip.duration = Tick(5 * TICKS_PER_SECOND);
+    let start = 48_000;
+    let octave = mix_graph(&p, p.sequence(inner).unwrap(), start, 48_000, &map, None);
+    assert!(rising(&octave).abs_diff(1000) <= 2, "without it, an octave up: {}", rising(&octave));
+    p.sequence_mut(inner).unwrap().audio_tracks[0].items[0].maintain_pitch = true;
+    let kept = mix_graph(&p, p.sequence(inner).unwrap(), start, 48_000, &map, None);
+    assert!(rising(&kept).abs_diff(500) <= 4, "kept: {} cycles a second", rising(&kept));
+}
+
+#[test]
 fn speed_and_reverse_on_a_nest_change_its_sound_like_a_clips() {
     // speed and reverse used to be ignored for the sound of a nest
     let (mut p, outer, map, tone) = nested_tone(48_000);

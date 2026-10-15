@@ -388,25 +388,86 @@ pub(crate) fn duplicate(s: &mut Session, id: u64) -> Result<u64, MobileError> {
 /// is refused.
 pub(crate) fn replace(s: &mut Session, id: u64, path: &str) -> Result<(), MobileError> {
     let (_, _, c) = locate(s, id)?;
-    let items = import(s, &[path.to_string()])?;
-    let item = items.first().copied().ok_or_else(|| MobileError::Import("The file holds no media.".into()))?;
-    let r = ex(s, "clip.replaceFromBin", json!({"clips": [c.id.0], "item": item}))?;
-    if r["short"].as_array().is_some_and(|a| !a.is_empty()) {
-        s.undo();
-        settle(s);
-        return Err(MobileError::Command("The new video is shorter than the clip. Choose a longer video or trim the clip first.".into()));
+    let old = shown_size(s, c.item);
+    let short = std::cell::Cell::new(false);
+    // one undo step; a refused replace leaves nothing behind
+    let r = s.edit_group("Replace", |s| {
+        let items = import(s, &[path.to_string()]).map_err(|e| other(e.to_string()))?;
+        let item = items.first().copied().ok_or_else(|| other("The file holds no media."))?;
+        let r = s.execute("clip.replaceFromBin", json!({"clips": [c.id.0], "item": item}))?;
+        if r["short"].as_array().is_some_and(|a| !a.is_empty()) {
+            short.set(true);
+            return Err(other("short"));
+        }
+        refit(s, c.id, old)
+    });
+    match r {
+        Err(_) if short.get() => Err(MobileError::Command("The new video is shorter than the clip. Choose a longer video or trim the clip first.".into())),
+        r => Ok(r?),
     }
-    Ok(())
 }
 
-/// Change a clip's speed (0.1× to 10×). The main track makes room or closes up.
+/// The size a picture shows at, in the sequence's pixels (its display aspect), if it has one.
+fn shown_size(s: &Session, item: ItemId) -> Option<(f64, f64)> {
+    let seq = s.active_sequence()?;
+    let size = s.project.source_size(item).filter(|&(w, h)| w > 0 && h > 0)?;
+    let par = s.project.source_par(item).unwrap_or(seq.settings.par);
+    Some(filmcraft_project::conformed_size(size, par, seq.settings.par))
+}
+
+/// After a replace, the new picture fits the frame the way the old one did (the clip's scale
+/// mode): its anchor moves to the same point of the new picture, and its scale changes by as
+/// much as the fit does. Without both sizes the clip stays as it is.
+fn refit(s: &mut Session, clip: ClipId, old: Option<(f64, f64)>) -> filmcraft_engine::Result<()> {
+    let Some((w0, h0)) = old else { return Ok(()) };
+    let seq = s.active_sequence().ok_or(EngineError::NoSequence)?;
+    let (fw, fh) = (f64::from(seq.settings.width.max(1)), f64::from(seq.settings.height.max(1)));
+    let Some(item) = seq.find_item(clip).map(|(_, c)| c.item) else { return Ok(()) };
+    let Some((w1, h1)) = shown_size(s, item) else { return Ok(()) };
+    let fit = |w: f64, h: f64| (fw / w).min(fh / h);
+    let k = fit(w1, h1) / fit(w0, h0);
+    if !k.is_finite() || k <= 0.0 {
+        return Ok(());
+    }
+    s.edit_sequence("Replace", |q, _, _| {
+        let Some((_, it)) = q.find_item_mut(clip) else { return Ok(()) };
+        // Scale to Frame Size refits on its own
+        let refits = it.scale_to_frame;
+        let Some(m) = it.effect_mut("motion") else { return Ok(()) };
+        if let Some(p) = m.param_mut("anchor") {
+            p.map_values(|v| match v {
+                // an automatic (NaN) anchor stays automatic
+                ParamValue::Vec2(mut v) => {
+                    v.x = v.x / w0 * w1;
+                    v.y = v.y / h0 * h1;
+                    ParamValue::Vec2(v)
+                }
+                other => other,
+            });
+        }
+        if !refits {
+            for id in ["scale", "scale_width"] {
+                if let Some(p) = m.param_mut(id) {
+                    p.map_values(|v| match v {
+                        ParamValue::Float(x) => ParamValue::Float((x * k).clamp(0.0, MAX_SCALE)),
+                        other => other,
+                    });
+                }
+            }
+        }
+        Ok(())
+    })
+}
+
+/// Change a clip's speed (0.1× to 10×), keeping the pitch of its sound. The main track makes room
+/// or closes up.
 pub(crate) fn set_speed(s: &mut Session, id: u64, speed: f64) -> Result<(), MobileError> {
     let (kind, track, c) = locate(s, id)?;
     if !speed.is_finite() {
         return Err(MobileError::Command("Speed must be a number.".into()));
     }
     let speed = speed.clamp(MIN_SPEED, MAX_SPEED);
-    let params = json!({"clips": [c.id.0], "speed": speed * 100.0, "ripple": is_main(kind, track)});
+    let params = json!({"clips": [c.id.0], "speed": speed * 100.0, "ripple": is_main(kind, track), "maintainPitch": true});
     if is_main(kind, track) {
         s.edit_group("Speed", |s| ripple_main(s, c.end(), |s| s.execute("clip.speedDuration", params)))?;
     } else {
@@ -910,11 +971,7 @@ pub(crate) fn set_aspect(s: &mut Session, num: u32, den: u32) -> Result<(), Mobi
     let mut factors = std::collections::HashMap::new();
     for t in &seq.video_tracks {
         for it in &t.items {
-            let size = s.project.source_size(it.item).filter(|&(sw, sh)| sw > 0 && sh > 0).map(|size| {
-                let par = s.project.source_par(it.item).unwrap_or(seq.settings.par);
-                filmcraft_project::conformed_size(size, par, seq.settings.par)
-            });
-            let k = match size {
+            let k = match shown_size(s, it.item) {
                 Some((sw, sh)) => fit(sw, sh, fw1, fh1) / fit(sw, sh, fw0, fh0),
                 None => fit(fw0, fh0, fw1, fh1),
             };

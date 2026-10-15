@@ -224,10 +224,43 @@ fn speed_changes_the_length_and_ripples_the_main_track() {
     let main = main_clips(&m);
     assert_eq!((main[0].duration, main[0].speed), (SEC, 2.0));
     assert_eq!(main[1].start, SEC);
+    let keeps = m.lock().active_sequence().and_then(|q| q.find_item(filmcraft_project::ClipId(ids[0]))).is_some_and(|(_, c)| c.maintain_pitch);
+    assert!(keeps, "the sound keeps its pitch");
     // out-of-range speeds are clamped, not refused
     m.set_speed(ids[0], 50.0).unwrap();
     assert_eq!(main_clips(&m)[0].speed, 10.0);
     assert!(m.set_speed(ids[0], f64::NAN).is_err());
+}
+
+#[test]
+fn replace_keeps_place_and_length_and_refuses_a_shorter_video() {
+    let (m, d, ids) = two_clips();
+    m.forget_history();
+    let longer = movie(&d, "longer.mp4", DemoScene::Dunes, 96);
+    m.replace(ids[0], longer).unwrap();
+    let main = main_clips(&m);
+    assert_eq!((main.len(), main[0].start, main[0].duration), (2, 0, 2 * SEC));
+    // a shorter one is refused, and leaves nothing to redo
+    let shorter = movie(&d, "shorter.mp4", DemoScene::Aurora, 24);
+    let before: Vec<(u64, i64, i64)> = main_clips(&m).iter().map(|c| (c.id, c.start, c.duration)).collect();
+    assert!(matches!(m.replace(ids[1], shorter), Err(MobileError::Command(_))));
+    assert_eq!(main_clips(&m).iter().map(|c| (c.id, c.start, c.duration)).collect::<Vec<_>>(), before);
+    assert!(!m.poll().can_redo);
+    // a picture of another shape fits the frame as the video did, centred on its own middle
+    let motion = |m: &MobileSession| {
+        let s = m.lock();
+        let c = s.active_sequence().and_then(|q| q.find_item(filmcraft_project::ClipId(ids[0]))).map(|(_, c)| c.clone()).unwrap();
+        let e = c.effects.iter().find(|e| e.effect == "motion").unwrap().clone();
+        (e.vec2_at("anchor", c.source_in), e.f64_at("scale", c.source_in))
+    };
+    let (_, scale) = motion(&m);
+    m.replace(ids[0], picture(&d)).unwrap();
+    let (anchor, now) = motion(&m);
+    assert_eq!((anchor.x, anchor.y), (32.0, 32.0), "the middle of the 64 px picture");
+    assert!((now / scale - 5.0).abs() < 1e-9, "320 px wide fitted 1080, 64 px fits it at five times the scale: {scale} → {now}");
+    assert_eq!(main_clips(&m)[0].duration, 2 * SEC);
+    m.undo();
+    assert_eq!(motion(&m).1, scale, "one undo step");
 }
 
 #[test]

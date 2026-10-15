@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use filmcraft_audio_dsp::channels::{self as chans, Layout, Mixdown};
 use filmcraft_frame::AudioBuffer;
 use filmcraft_project::{AudioChannels, Project, Sequence, Track, TrackId, TrackItem};
-use filmcraft_time::{Tick, TimeRange};
+use filmcraft_time::{TICKS_PER_SECOND, Tick, TimeRange};
 
 use crate::mixer::Override;
 use crate::{SourceProvider, transitions};
@@ -392,6 +392,10 @@ fn raw_channels(item: &TrackItem, src: SourceAudio, x0: i64, len: usize, sr: u32
         remixed
     } else if (speed - 1.0).abs() < 1e-9 && !item.reverse {
         src(src_start_ticks.to_units_floor(sr as i64), n)
+    } else if item.maintain_pitch && !item.reverse && item.frame_hold.is_none() {
+        // the pitch kept: time-stretched from the media sample the clip starts on
+        let m0 = item.source_time_at(Tick::from_units(item_s0, sr as i64)).0 as f64 * f64::from(sr) / TICKS_PER_SECOND as f64;
+        crate::stretch::stretch(&|m, len| src(m, len), m0, speed, a0 - item_s0, n, sr)
     } else {
         // varispeed: read a longer span and resample linearly
         let span = ((n as f64) * speed).ceil() as usize + 2;
