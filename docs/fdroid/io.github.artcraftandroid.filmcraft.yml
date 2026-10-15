@@ -1,0 +1,45 @@
+Categories:
+  - Multimedia
+License: MIT
+AuthorName: artcraft-android
+SourceCode: https://github.com/artcraft-android/filmcraft-android
+IssueTracker: https://github.com/artcraft-android/filmcraft-android/issues
+Changelog: https://github.com/artcraft-android/filmcraft-android/releases
+
+AutoName: FilmCraft
+
+RepoType: git
+Repo: https://github.com/artcraft-android/filmcraft-android.git
+Binaries:
+  https://github.com/artcraft-android/filmcraft-android/releases/download/v%v/filmcraft-android-%v.apk
+
+Builds:
+  - versionName: 0.0.2-beta
+    versionCode: 2012
+    commit: TAG_COMMIT_SHA
+    subdir: apps/filmcraft-android/android/app
+    sudo:
+      - apt-get update
+      - apt-get install -y gcc libc-dev rustup
+    gradle:
+      - yes
+    prebuild:
+      - rustup toolchain install $(sed -n -E 's/^channel = "(.*)"/\1/p' ../../../../rust-toolchain.toml)
+        --profile minimal --target aarch64-linux-android
+      - cargo install --locked --version $(sed -n -E 's/.*cargo install cargo-ndk
+        --version ([0-9.]+).*/\1/p' ../../../../.github/workflows/release.yml) cargo-ndk
+    ndk: 29.0.14206865
+    gradleprops:
+      - filmcraft.abis=arm64-v8a
+      - filmcraft.unsigned=true
+
+AllowedAPKSigningKeys: 7356d58ae3446b3e6cc457d0b9901700376c787310c9dba14e9c11866588eeb5
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags
+VercodeOperation:
+  - '%c * 10 + 2'
+UpdateCheckData:
+  apps/filmcraft-android/android/gradle.properties|filmcraft\.versionCode=(\d+)|.|filmcraft\.version=(.+)
+CurrentVersion: 0.0.2-beta
+CurrentVersionCode: 2012

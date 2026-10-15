@@ -42,7 +42,7 @@ jobs:
           fi
           # the tag must be the version gradle.properties names (F-Droid builds from that file)
           if [ "$v" != "$listed" ]; then
-            echo "::error::the tag is v$v but gradle.properties says filmcraft.version=$listed: set it before tagging"
+            echo "::error::the tag is v$v but gradle.properties says filmcraft.version=$listed: set it (and filmcraft.versionCode) before tagging"
             exit 1
           fi
           echo "version=$v" >>"$GITHUB_OUTPUT"

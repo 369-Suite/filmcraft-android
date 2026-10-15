@@ -132,7 +132,7 @@ FilmCraft for Android is in beta.
 |---|---|
 | Projects from the photo library, files or blank; open shared videos; autosave; rename, duplicate, delete | ✅ |
 | The timeline: trim, move, reorder, split, delete, duplicate, replace, undo and redo; pinch to zoom | ✅ |
-| Speed (0.1–10×), freeze frame, volume, fades, extract audio, voiceover | ✅ · keeping the pitch at other speeds ⬜ |
+| Speed (0.1–10×, the sound keeps its pitch), freeze frame, volume, fades, extract audio, voiceover | ✅ |
 | 31 filters, 23 effects, opacity, mirror and flip; move, scale and turn on the preview | ✅ |
 | 50 transitions, intro and outro, apply to all | ✅ |
 | Text: presets, the phone's fonts, colours and layout | ✅ |

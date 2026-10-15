@@ -1,0 +1,27 @@
+An open-source, reimplementation of Adobe Premiere in Rust while using Kotlin as the UI framework.
+
+FilmCraft is a video editor for Android, built on the FilmCraft engine. It follows the layout and the tools of Premiere for phones, and everything stays on your phone: no account, no cloud.
+
+Edit
+* Start from your photo library, from files or blank; open videos shared from other apps
+* Trim, move, split, delete, duplicate and replace clips; undo and redo
+* Speed from 0.1x to 10x (the sound keeps its pitch), freeze frames, volume, fades, extract audio
+* Record a voiceover
+
+Look
+* 31 filters and 23 effects, opacity, mirror and flip; move, scale and turn clips on the preview
+* 50 transitions, intros and outros
+* Text with presets, the phone's fonts, colours and layout
+* 11 aspect ratios and blank clips
+
+Captions and speech
+* Captions made on the phone by a speech model, then edited, styled and burned into the video
+* Text to speech with two built-in voices and nine natural voices
+* The speech models are downloaded once, only when you ask; the sound never leaves the phone
+
+Export
+* 720p, 1080p or 4K at 24 to 60 fps, saved to your Movies folder and ready to share
+
+Works upright and sideways. FilmCraft is in beta.
+
+FilmCraft is not affiliated with or endorsed by Adobe. Premiere is a trademark of Adobe Inc.

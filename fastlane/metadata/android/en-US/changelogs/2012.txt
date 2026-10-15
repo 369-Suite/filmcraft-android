@@ -1,0 +1,4 @@
+First release on F-Droid.
+* Speed changes keep the pitch of the sound
+* Replace fits the new picture to the frame, and a refused replace leaves nothing to redo
+* Reproducible builds: the APK F-Droid builds matches the one on GitHub

@@ -16,7 +16,9 @@ val minApi = 29
 // The app's version: gradle.properties' filmcraft.version, or the version tag's when the release
 // workflow builds a release. The version code follows from it (0.0.1-beta → 101, 0.0.1-beta.2 →
 // 102, 0.0.1 → 199, 0.1.0-beta → 10001), so a pre-release comes before its release and every
-// release before the next version's pre-releases.
+// release before the next version's pre-releases; times ten plus the ABI of a one-ABI build
+// (armeabi-v7a 1, arm64-v8a 2, x86_64 3; 0 for several), so each APK of a release has its own code
+// (F-Droid needs that).
 val appVersion: String = providers.gradleProperty("filmcraft.version").get()
 val appVersionCode: Int = run {
     val m = requireNotNull(Regex("""(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z-]+?(\.(\d+))?)?""").matchEntire(appVersion)) {
@@ -27,13 +29,27 @@ val appVersionCode: Int = run {
     require(minor < 100 && patch < 100 && (pre ?: 1) in 1..98) {
         "filmcraft.version $appVersion: minor and patch must be under 100, and a pre-release's number 1 to 98"
     }
-    ((major * 100 + minor) * 100 + patch) * 100 + (pre ?: 99)
+    val base = ((major * 100 + minor) * 100 + patch) * 100 + (pre ?: 99)
+    providers.gradleProperty("filmcraft.versionCode").orNull?.let { listed ->
+        require(listed.trim().toIntOrNull() == base) {
+            "gradle.properties: filmcraft.versionCode=$listed, but version $appVersion's is $base (set both before tagging)"
+        }
+    }
+    val abi = when (rustAbis.singleOrNull()) {
+        "armeabi-v7a" -> 1
+        "arm64-v8a" -> 2
+        "x86_64" -> 3
+        else -> 0
+    }
+    base * 10 + abi
 }
 
 // The release key, when the build is given one (the release workflow passes it from the repository's
 // secrets). Without one a release build is signed with the debug key: it installs, but it can't
-// update a published release.
+// update a published release; or, with -Pfilmcraft.unsigned=true (F-Droid's build), not signed at
+// all, so the published APK's signature can be checked against it.
 val releaseKeystore: String? = providers.environmentVariable("FILMCRAFT_KEYSTORE").orNull
+val unsignedRelease: Boolean = providers.gradleProperty("filmcraft.unsigned").orNull == "true"
 
 /** rustup's `cargo` (Android Studio may not see rustup's PATH), else `cargo` from PATH; `CARGO` overrides. */
 val cargoExecutable: String = run {
@@ -56,9 +72,18 @@ abstract class CargoNdkBuild : DefaultTask() {
     fun build() {
         val targets = abis.get().flatMap { listOf("-t", it) }
         val out = outputDir.get().asFile.absolutePath
+        // Reproducible: the library mustn't hold the paths it was built in (panic locations name
+        // source files), so the same commit builds byte-identical here, on CI and on F-Droid's
+        // build server. Encoded flags (0x1f-separated) survive spaces in the paths.
+        val cargoHome = System.getenv("CARGO_HOME")?.takeIf { it.isNotBlank() } ?: File(System.getProperty("user.home"), ".cargo").absolutePath
+        val remap = listOf(
+            "--remap-path-prefix=${File(workspaceDir.get()).absolutePath}=/filmcraft",
+            "--remap-path-prefix=$cargoHome=/cargo",
+        )
         execOperations.exec {
             workingDir(workspaceDir.get())
             environment("ANDROID_NDK_HOME", ndkDir.get())
+            environment("CARGO_ENCODED_RUSTFLAGS", remap.joinToString("\u001f"))
             commandLine(
                 listOf(cargo.get(), "ndk") + targets +
                     listOf("--platform", apiLevel.get().toString(), "-o", out, "build", "--release", "-p", "filmcraft-android", "--lib"),
@@ -216,8 +241,15 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+            signingConfig = if (unsignedRelease) null else signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+            // reproducible builds: no record of the checkout in the APK
+            vcsInfo { include = false }
         }
+    }
+    // reproducible builds: no dependency metadata signing block (F-Droid's check rejects it)
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -273,6 +305,11 @@ androidComponents {
         variant.sources.res?.addGeneratedSourceDirectory(res, FilmcraftAssets::outputDir)
         variant.sources.assets?.addGeneratedSourceDirectory(licences, FilmcraftAssets::outputDir)
     }
+}
+
+// reproducible builds: no baseline profile in the APK (its bytes vary from one build to the next)
+tasks.configureEach {
+    if (name.contains("ArtProfile")) enabled = false
 }
 
 dependencies {
