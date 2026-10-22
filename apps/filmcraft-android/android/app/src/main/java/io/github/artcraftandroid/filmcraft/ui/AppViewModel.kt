@@ -32,6 +32,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 
 /** The screens. */
 enum class Screen { Home, Editor, Export, Settings, About, Licences }
@@ -143,6 +145,34 @@ class AppViewModel(app: Application) : AndroidViewModel(app), EditorHost {
     }
 
     // ---- reviewed offline AI commands ----
+    /**
+     * Choose a video via Android's picker. Nothing is read until user selects a file.
+     * The selected media is copied into FilmCraft's own project storage.
+     */
+    suspend fun createFromMediaForBridge(name: String) {
+        val e = engine ?: error(engineProblem ?: "Editor is still starting")
+        val selected = suspendCancellableCoroutine<List<Uri>> { cont ->
+            pick(PickKind.PhotosAndVideos) { uris ->
+                if (cont.isActive) cont.resume(uris)
+            }
+        }
+        require(selected.size == 1) { "Select exactly one video" }
+        val uri = selected.single()
+        val kind = getApplication<Application>().contentResolver.getType(uri).orEmpty()
+        require(kind.startsWith("video/")) { "Please select a video, not an image" }
+        val (width, height) = withContext(Dispatchers.IO) { frameFor(uri) }
+        val p = withContext(Dispatchers.IO) { projects.create(name, width, height) }
+        open(e, p, fresh = true)
+        val ed = editor ?: error("Could not open the selected video project")
+        val media = withContext(Dispatchers.IO) { projects.importUri(p, uri) }
+        ed.engine.command {
+            addMedia(listOf(media.absolutePath))
+            forgetHistory()
+        }
+        ed.refresh()
+        ed.save()
+    }
+
     suspend fun createBlankForBridge(name: String) {
         val e = engine ?: error(engineProblem ?: "Editor is still starting")
         val p = withContext(Dispatchers.IO) { projects.create(name, 1080, 1920) }
