@@ -60,6 +60,6 @@ fun AiImportOverlay(
                 Button(onClick = onApply, enabled = !busy && reviewed != null) { Text("Apply") }
             }
         },
-        dismissButton = { TextButton(onClick = onClose, enabled = !busy) { Text("Close") }
+        dismissButton = { TextButton(onClick = onClose, enabled = !busy) { Text("Close") } }
     )
 }
