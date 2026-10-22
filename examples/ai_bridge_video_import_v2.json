@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "commands": [
+    {
+      "op": "project.create_from_media",
+      "args": {
+        "name": "Nature Video AI Test"
+      }
+    },
+    {
+      "op": "editor.seek_seconds",
+      "args": {
+        "seconds": 1
+      }
+    },
+    {
+      "op": "editor.add_text",
+      "args": {
+        "text": "Some days need no plan."
+      }
+    },
+    {
+      "op": "editor.open_export",
+      "args": {}
+    }
+  ]
+}
