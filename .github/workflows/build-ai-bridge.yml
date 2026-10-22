@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - ai-bridge-v1
+      - ai-bridge-v2
   workflow_dispatch:
 
 permissions:

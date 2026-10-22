@@ -1,6 +1,7 @@
 package io.github.artcraftandroid.filmcraft.bridge
 
 import io.github.artcraftandroid.filmcraft.ui.AppViewModel
+import io.github.artcraftandroid.filmcraft.ui.editor.TPS
 import org.json.JSONObject
 
 /** Offline, reviewed command set. No API key or network listener. */
@@ -8,7 +9,7 @@ data class AiStep(val op: String, val args: JSONObject, val label: String)
 data class AiScript(val steps: List<AiStep>)
 
 object AiScriptParser {
-    private val operations = setOf("project.create_blank", "editor.add_blank", "editor.add_text")
+    private val operations = setOf("project.create_blank", "project.create_from_media", "editor.add_blank", "editor.add_text", "editor.seek_seconds", "editor.open_export")
     fun parse(input: String): AiScript {
         require(input.length <= 10_000) { "Script is too long" }
         var src = input.trim()
@@ -33,6 +34,21 @@ object AiScriptParser {
                     require(name is String && name.isNotBlank() && name.length <= 80) { "Project name must be 1-80 characters" }
                     "Create project: $name"
                 }
+                "project.create_from_media" -> {
+                    require(i == 0) { "Import video must be the first command" }
+                    val name = args.opt("name")
+                    require(name is String && name.isNotBlank() && name.length <= 80) { "Project name must be 1-80 characters" }
+                    "Ask you to choose a video, then create: $name"
+                }
+                "editor.seek_seconds" -> {
+                    val at = args.optDouble("seconds", Double.NaN)
+                    require(at.isFinite() && at in 0.0..7200.0) { "Position must be 0 to 7200 seconds" }
+                    "Move playhead to ${"%.2f".format(java.util.Locale.US, at)} seconds"
+                }
+                "editor.open_export" -> {
+                    require(i == commands.length() - 1) { "Open export must be last" }
+                    "Open export settings for your approval"
+                }
                 "editor.add_blank" -> "Add a blank clip"
                 "editor.add_text" -> {
                     val value = args.opt("text")
@@ -50,6 +66,19 @@ object AiLocalExecutor {
     suspend fun execute(vm: AppViewModel, step: AiStep) {
         when (step.op) {
             "project.create_blank" -> vm.createBlankForBridge(step.args.getString("name"))
+            "project.create_from_media" -> vm.createFromMediaForBridge(step.args.getString("name"))
+            "editor.open_export" -> {
+                check(vm.editor != null) { "Open a project first" }
+                vm.export()
+            }
+            "editor.seek_seconds" -> {
+                val ed = vm.editor ?: error("Open a project first")
+                val requested = (step.args.getDouble("seconds") * TPS).toLong()
+                val tick = requested.coerceIn(0L, ed.duration)
+                ed.stop()
+                ed.engine.command { setPlayhead(tick) }
+                ed.refresh()
+            }
             "editor.add_blank", "editor.add_text" -> {
                 val ed = vm.editor ?: error("Open a project first")
                 ed.stop()
