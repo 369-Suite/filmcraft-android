@@ -142,6 +142,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app), EditorHost {
         }
     }
 
+    // ---- reviewed offline AI commands ----
+    suspend fun createBlankForBridge(name: String) {
+        val e = engine ?: error(engineProblem ?: "Editor is still starting")
+        val p = withContext(Dispatchers.IO) { projects.create(name, 1080, 1920) }
+        open(e, p, fresh = true)
+        check(editor?.project?.id == p.id) { "Failed to open the new project" }
+    }
+
     // ---- projects ----
 
     /** Start a project the way a Home tile (or the + button) says. */

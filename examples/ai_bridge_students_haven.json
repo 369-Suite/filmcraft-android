@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "commands": [
+    {
+      "op": "project.create_blank",
+      "args": {
+        "name": "Students Haven AI Test"
+      }
+    },
+    {
+      "op": "editor.add_blank",
+      "args": {}
+    },
+    {
+      "op": "editor.add_text",
+      "args": {
+        "text": "Can you solve this CA/CMA question?"
+      }
+    }
+  ]
+}
