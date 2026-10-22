@@ -7,6 +7,14 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
+import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import io.github.artcraftandroid.filmcraft.bridge.AiImportOverlay
+import io.github.artcraftandroid.filmcraft.bridge.AiLocalExecutor
+import io.github.artcraftandroid.filmcraft.bridge.AiScript
+import io.github.artcraftandroid.filmcraft.bridge.AiScriptParser
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -28,6 +36,11 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private val vm: AppViewModel by viewModels()
+    private var aiOpen by mutableStateOf(false)
+    private var aiScript by mutableStateOf("")
+    private var aiReviewed by mutableStateOf<AiScript?>(null)
+    private var aiBusy by mutableStateOf(false)
+    private var aiStatus by mutableStateOf("")
     private var pending: PickRequest? = null
     private var micGranted: (() -> Unit)? = null
 
@@ -45,7 +58,22 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge(SystemBarStyle.dark(Color.TRANSPARENT), SystemBarStyle.dark(Color.TRANSPARENT))
         super.onCreate(savedInstanceState)
         window.isNavigationBarContrastEnforced = false
-        setContent { FilmcraftTheme { AppRoot(vm) } }
+        setContent {
+            FilmcraftTheme {
+                Box {
+                    AppRoot(vm)
+                    AiImportOverlay(
+                        open = aiOpen, script = aiScript, reviewed = aiReviewed,
+                        busy = aiBusy, status = aiStatus,
+                        onOpen = { aiOpen = true },
+                        onClose = { if (!aiBusy) aiOpen = false },
+                        onChange = { aiScript = it; aiReviewed = null; aiStatus = "" },
+                        onReview = { reviewAi() },
+                        onApply = { applyAi() },
+                    )
+                }
+            }
+        }
         lifecycleScope.launch { for (r in vm.pickRequests) launchPicker(r) }
         lifecycleScope.launch { for (r in vm.micRequests) askMicrophone(r) }
         lifecycleScope.launch {
@@ -66,6 +94,38 @@ class MainActivity : ComponentActivity() {
         super.onStop()
         vm.editor?.stop()
         vm.editor?.let { ed -> lifecycleScope.launch { ed.save() } }
+    }
+
+    private fun reviewAi() {
+        aiReviewed = null
+        aiStatus = ""
+        try {
+            aiReviewed = AiScriptParser.parse(aiScript)
+        } catch (ex: Exception) {
+            aiStatus = "Script rejected: ${ex.message ?: "Invalid JSON"}"
+        }
+    }
+
+    private fun applyAi() {
+        if (aiBusy) return
+        val plan = aiReviewed ?: return
+        aiBusy = true
+        aiStatus = "Applying 0 / ${plan.steps.size} actions..."
+        lifecycleScope.launch {
+            try {
+                for ((i, step) in plan.steps.withIndex()) {
+                    AiLocalExecutor.execute(vm, step)
+                    aiStatus = "Applied ${i + 1} / ${plan.steps.size} actions..."
+                }
+                aiStatus = "Completed ${plan.steps.size} actions. Review timeline before exporting."
+                aiReviewed = null
+            } catch (ex: Exception) {
+                aiStatus = "Stopped: ${ex.message ?: "Unknown error"}. Earlier actions may have been saved."
+                aiReviewed = null
+            } finally {
+                aiBusy = false
+            }
+        }
     }
 
     private fun launchSafely(block: () -> Unit) {
@@ -108,6 +168,13 @@ class MainActivity : ComponentActivity() {
 
     /** Videos and pictures other apps open with or share to FilmCraft: a new project from them. */
     private fun handle(intent: Intent?) {
+        if (intent?.action == Intent.ACTION_SEND && intent.type == "text/plain") {
+            aiScript = intent.getStringExtra(Intent.EXTRA_TEXT).orEmpty()
+            aiReviewed = null
+            aiStatus = "Shared text received. Review and Apply to continue."
+            aiOpen = true
+            return
+        }
         val uris: List<Uri> = when (intent?.action) {
             Intent.ACTION_VIEW -> listOfNotNull(intent.data)
             Intent.ACTION_SEND -> listOfNotNull(IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java))
