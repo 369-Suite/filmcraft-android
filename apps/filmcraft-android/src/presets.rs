@@ -144,6 +144,10 @@ const LOOKS: &[Look] = &[
     },
     Look { id: "instant", name: "Instant", fade: 25.0, temperature: 12.0, tint: 6.0, highlights: -20.0, saturation: -10.0, vignette: -0.6, ..NEUTRAL },
     Look { id: "vivid", name: "Vivid", saturation: 50.0, vibrance: 30.0, contrast: 15.0, ..NEUTRAL },
+    // v0.0.2: append new looks so existing project filter indices remain stable.
+    Look { id: "kerala_monsoon", name: "Kerala Monsoon", temperature: -12.0, tint: -7.0, exposure: -0.10, contrast: 10.0, highlights: -30.0, shadows: 12.0, saturation: -18.0, vibrance: -8.0, shadow_tint: [-0.02, 0.02, 0.05], fade: 8.0, vignette: -0.45, ..NEUTRAL },
+    Look { id: "moody_forest", name: "Moody Forest", temperature: -15.0, tint: -9.0, exposure: -0.22, contrast: 22.0, highlights: -32.0, shadows: -9.0, saturation: -28.0, shadow_tint: [-0.03, 0.02, 0.04], highlight_tint: [0.02, 0.01, -0.01], vignette: -0.85, grain: 5.0, ..NEUTRAL },
+    Look { id: "teal_orange_film", name: "Teal Orange Film", contrast: 18.0, highlights: -18.0, shadows: 8.0, saturation: -9.0, shadow_tint: TEAL, highlight_tint: ORANGE, grain: 4.0, vignette: -0.5, ..NEUTRAL },
 ];
 
 /// The filter picker's list (None is the picker's own first tile).
