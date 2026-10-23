@@ -79,7 +79,7 @@ import kotlinx.coroutines.withContext
 private val LANGUAGES = listOf(
     "auto" to "Detect", "en" to "English", "es" to "Spanish", "fr" to "French", "de" to "German", "it" to "Italian",
     "pt" to "Portuguese", "nl" to "Dutch", "pl" to "Polish", "tr" to "Turkish", "ru" to "Russian", "uk" to "Ukrainian",
-    "ar" to "Arabic", "hi" to "Hindi", "ja" to "Japanese", "ko" to "Korean", "zh" to "Chinese",
+    "ar" to "Arabic", "hi" to "Hindi", "ml" to "Malayalam (മലയാളം)", "ja" to "Japanese", "ko" to "Korean", "zh" to "Chinese",
 )
 
 /** The speech models by what they are good at. */
